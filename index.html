@@ -1,0 +1,239 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Parte 1 — Ejecutar un modelo LLM local con llama.cpp y hablar con él</title>
+
+  <style>
+    :root { color-scheme: light dark; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Inter, Arial, sans-serif;
+      line-height: 1.65;
+      margin: 0;
+      padding: 0;
+    }
+    main {
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 32px 18px 72px;
+    }
+    h1 { font-size: 2rem; margin: 0 0 1rem; line-height: 1.2; }
+    h2 { font-size: 1.4rem; margin: 2.2rem 0 0.8rem; }
+    h3 { font-size: 1.1rem; margin: 1.4rem 0 0.6rem; }
+    h4 { font-size: 1rem; margin: 1.1rem 0 0.4rem; }
+    p { margin: 0.8rem 0; }
+    a { word-break: break-word; }
+    code, pre {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+      font-size: 0.95em;
+    }
+    pre {
+      padding: 14px 16px;
+      border-radius: 12px;
+      overflow-x: auto;
+      background: rgba(127,127,127,0.12);
+      margin: 0.8rem 0 1.2rem;
+    }
+    hr {
+      border: 0;
+      border-top: 1px solid rgba(127,127,127,0.25);
+      margin: 2.6rem 0;
+    }
+    .callout {
+      border-left: 4px solid rgba(127,127,127,0.55);
+      padding: 12px 14px;
+      background: rgba(127,127,127,0.08);
+      border-radius: 12px;
+      margin: 1.2rem 0;
+    }
+    figure { margin: 1.2rem 0 1.6rem; }
+    .img {
+      display: block;
+      width: 100%;
+      height: auto;
+      border-radius: 14px;
+      border: 1px solid rgba(127,127,127,0.18);
+      box-shadow: 0 10px 28px rgba(0,0,0,0.12);
+    }
+    figcaption {
+      margin-top: 0.55rem;
+      font-size: 0.92rem;
+      opacity: 0.85;
+    }
+    ul { padding-left: 1.25rem; }
+    li { margin: 0.35rem 0; }
+  </style>
+</head>
+
+<body>
+<main>
+
+<h1>Parte 1 — Ejecutar un modelo LLM local con llama.cpp y hablar con él</h1>
+
+<p>
+Antes de conectar modelos locales a herramientas, agentes o editores, hay un paso que no conviene saltear:
+<strong>asegurarnos de que el modelo corre bien por sí solo</strong>.
+</p>
+
+<p>
+En esta primera parte vamos a levantar un modelo LLM de forma completamente local usando
+<strong>llama.cpp</strong>. No hay APIs externas ni servicios en la nube: solo el modelo,
+corriendo en tu propia máquina.
+</p>
+
+<p>
+En la <strong>Parte 2</strong>, una vez que este setup esté sólido, vamos a reutilizarlo para
+conectarlo a herramientas externas como Claude Code.
+</p>
+
+<hr />
+
+<h2>Elegir y descargar un modelo</h2>
+
+<p>
+<code>llama.cpp</code> trabaja con modelos en formato <strong>GGUF</strong>. Una de las fuentes
+más comunes para conseguirlos es Hugging Face. Para este ejemplo usamos
+<strong>Mistral 7B Instruct v0.2</strong>:
+</p>
+
+<p>
+<a href="https://huggingface.co/TheBloke/Mistral-7B-Instruct-v0.2-GGUF" target="_blank">
+https://huggingface.co/TheBloke/Mistral-7B-Instruct-v0.2-GGUF
+</a>
+</p>
+
+<p>
+Al abrir la página, bajá hasta la sección <strong>“Provided files”</strong>. Ahí vas a ver todas
+las variantes del modelo disponibles en formato <code>.gguf</code>.
+</p>
+
+<figure>
+  <img class="img" src="imagenes/provided_files.png" alt="Provided files en Hugging Face" />
+  <figcaption>Lista de variantes del modelo (cuantizaciones).</figcaption>
+</figure>
+
+<h3>Qué archivo elegir y por qué</h3>
+
+<p>
+Cada archivo corresponde al mismo modelo, pero con distinta cuantización. Para la mayoría de los
+casos, <code>Q4_K_M</code> ofrece el mejor equilibrio entre calidad, velocidad y uso de memoria.
+</p>
+
+<figure>
+  <img class="img" src="imagenes/download_site.png" alt="Archivo GGUF seleccionado para descarga" />
+  <figcaption>Archivo recomendado: <code>Q4_K_M</code>.</figcaption>
+</figure>
+
+<hr />
+
+<h2>Preparar llama.cpp</h2>
+
+<p>
+Verificá primero que <code>llama-server</code> esté disponible en el sistema:
+</p>
+
+<pre><code>llama-server --help</code></pre>
+
+<figure>
+  <img class="img" src="imagenes/llama_check.png" alt="llama-server help" />
+  <figcaption>Chequeo rápido de instalación.</figcaption>
+</figure>
+
+<h3>Agregar llama.cpp al PATH (si no está)</h3>
+
+<p>
+Si el comando no existe, necesitás agregar la carpeta que contiene los binarios al
+<code>PATH</code> del sistema.
+</p>
+
+<h4>macOS / Linux</h4>
+
+<pre><code>export PATH="$PATH:/path/to/llama.cpp"</code></pre>
+
+<p>
+Agregá esa línea a <code>~/.zshrc</code> o <code>~/.bashrc</code> y recargá la sesión.
+</p>
+
+<h4>Windows</h4>
+
+<p>
+Agregá la carpeta que contiene <code>llama-server.exe</code> a la variable de entorno <strong>PATH</strong>
+desde la configuración del sistema.
+</p>
+
+<hr />
+
+<h2>Levantar el modelo como servidor local</h2>
+
+<pre><code>llama-server \
+  -m "/path/to/models/mistral-7b-instruct-v0.2.Q4_K_M.gguf" \
+  --port 9999 \
+  --host 127.0.0.1</code></pre>
+
+<figure>
+  <img class="img" src="imagenes/llama_run.png" alt="llama-server corriendo" />
+  <figcaption>Servidor local activo.</figcaption>
+</figure>
+
+<hr />
+
+<h2>Hablar con el modelo desde la terminal</h2>
+
+<pre><code>llama-cli \
+  -m "/path/to/models/mistral-7b-instruct-v0.2.Q4_K_M.gguf"</code></pre>
+
+<figure>
+  <img class="img" src="imagenes/llama-cli.png" alt="llama-cli en uso" />
+  <figcaption>Interacción directa con el modelo.</figcaption>
+</figure>
+
+<hr />
+
+<h2>Interfaz Web de llama-server</h2>
+
+<p>
+Si tu build incluye interfaz web, podés acceder a ella en:
+<code>http://127.0.0.1:9999</code>
+</p>
+
+<figure>
+  <img class="img" src="imagenes/llama_web.png" alt="Web UI de llama-server" />
+  <figcaption>Interfaz web para pruebas rápidas.</figcaption>
+</figure>
+
+<hr />
+
+<h2>Nota final: del motor al vehículo completo</h2>
+
+<p>
+Hasta acá trabajamos únicamente con el <strong>motor</strong>: un modelo LLM corriendo en local,
+controlado por vos, sin dependencias externas. Esta base es fundamental: te da soberanía,
+privacidad y costos previsibles.
+</p>
+
+<p>
+Sin embargo, un modelo local por sí solo sigue siendo eso: un motor. Responde texto, pero no
+entiende tu proyecto, no navega archivos, no aplica cambios ni ejecuta acciones.
+</p>
+
+<p>
+Herramientas como <strong>Claude Code</strong> o <strong>Goose</strong> agregan lo que falta para convertir
+ese motor en un <strong>vehículo completo</strong>: contexto del repositorio, edición de archivos,
+ejecución de comandos, orquestación de pasos y memoria entre interacciones.
+</p>
+
+<p>
+No compiten con los modelos locales: los potencian. El modelo sigue siendo el cerebro,
+pero la herramienta le da volante, tablero y pedales.
+</p>
+
+<p>
+En la <strong>Parte 2</strong> vamos a tomar exactamente este modelo local que ya corre en tu máquina
+y lo vamos a conectar a tooling real, para convertirlo en un copiloto de desarrollo usable
+en el día a día.
+</p>
+
+</main>
+</body>
+</html>
